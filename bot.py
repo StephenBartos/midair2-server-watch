@@ -35,7 +35,7 @@ class MidairBot(commands.Bot):
         )
 
     async def setup_hook(self) -> None:
-        self.pool = await asqlite.create_pool(config.DB_NAME)
+        self.pool = await asqlite.create_pool(f"{config.DB_NAME}.db")
         self.session = aiohttp.ClientSession()
         for extension in initial_extensions:
             try:
