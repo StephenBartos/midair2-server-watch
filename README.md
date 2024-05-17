@@ -45,3 +45,8 @@ DB_NAME=your-db-name
 
 ### Run the bot
 - `python3 -m launcher.py`
+### Sync the commands with your server
+After the bot is both invited to your server and running, sync it by using:
+> @bot_name sync
+
+The bot should reply with the number of commands synced
