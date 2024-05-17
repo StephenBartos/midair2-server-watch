@@ -21,43 +21,71 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class SetupCog(commands.GroupCog, name="setup"):
+class ServerListCog(commands.Cog):
     def __init__(self, bot):
         self.bot: MidairBot = bot
 
-    @app_commands.command(name="serverlist")
-    async def setup_server_list(self, interaction: discord.Interaction):
-        guild_id = interaction.guild_id
+    async def configure_server_list(
+        self, guild_id: int
+    ) -> tuple[discord.Embed, discord.ui.View]:
         async with self.bot.pool.acquire() as conn:
             query = "SELECT guild_id, channel_id, message_id, title FROM server_list WHERE guild_id=$1;"
-            server_list = await conn.fetchone(query, interaction.guild_id)
+            server_list = await conn.fetchone(query, guild_id)
             exists: bool = bool(server_list)
-            view = SetupView(self, self.bot, exists)
+            view = ConfigureServerListView(self, self.bot, exists)
             channel_id: int | None = server_list["channel_id"] if server_list else None
             message_id: int | None = server_list["message_id"] if server_list else None
             title: str | None = server_list["title"] if server_list else None
             embed = await self.create_embed(
-                channel_id, message_id, title, bool(server_list)
+                channel_id, message_id, title, exists=bool(server_list)
             )
-            await interaction.response.send_message(
-                embed=embed, view=view, ephemeral=True
+            return embed, view
+
+    async def delete_server_list(
+        self,
+        guild_id: int,
+    ):
+        async with self.bot.pool.acquire() as conn:
+            row = await conn.fetchone(
+                "SELECT channel_id, message_id FROM server_list WHERE guild_id = $1",
+                (guild_id),
             )
-
-    async def create_server_list(self, guild_id: int):
-        pass
-
-    async def edit_server_list(self, guild_id: int):
-        pass
-
-    @app_commands.command(name="serverwatcher")
-    async def setup_server_watcher(self, interaction: discord.Interaction):
-        guild_id = interaction.guild_id
+            channel_id: int = row["channel_id"]
+            message_id: int = row["message_id"]
+            guild: discord.Guild | None = self.bot.get_guild(guild_id)
+            if guild and channel_id and message_id:
+                # delete the message
+                channel = guild.get_channel(channel_id)
+                if isinstance(channel, discord.TextChannel):
+                    message: discord.PartialMessage = channel.get_partial_message(
+                        message_id
+                    )
+                    try:
+                        await message.delete()
+                    except discord.Forbidden:
+                        log.warning(
+                            f"[delete_server_list] Missing permissions to delete message {message_id} "
+                            f"in channel {channel_id} for guild {message_id}"
+                        )
+                    except discord.NotFound:
+                        log.warning(
+                            f"[delete_server_list] Could not find {message_id} "
+                            f"in channel {channel_id} for guild {message_id}, but it may still exist in discord"
+                        )
+                    except discord.HTTPException:
+                        log.warning(
+                            f"[delete_server_list] Ignoring HTTP exception when deleting message {message_id} "
+                            f"in channel {channel_id} for guild {message_id} but it may still exist in discord"
+                        )
+            await conn.execute("DELETE FROM server_list WHERE guild_id = $1", guild_id)
+            await conn.commit()
 
     async def create_embed(
         self,
-        channel_id: int | None,
-        message_id: int | None,
-        title: str | None,
+        channel_id: int | None = None,
+        message_id: int | None = None,
+        title: str | None = None,
+        *,
         exists: bool,
     ):
         embed = discord.Embed(
@@ -88,26 +116,30 @@ class SetupCog(commands.GroupCog, name="setup"):
         return embed
 
 
-class ServerListNameModal(discord.ui.Modal, title="Server List Name"):
-    def __init__(self, view: CreateServerList):
+class ConfigureServerListView(View):
+    cog: ServerListCog
+    bot: MidairBot
+    exists: bool
+
+    def __init__(self, cog: ServerListCog, bot: MidairBot, exists: bool):
         super().__init__(timeout=None)
-        self.view = view
+        self.cog = cog
+        self.bot = bot
+        self.exists = exists
+        if not exists:
+            self.add_item(create_server_list_button(self.cog, self.bot))
+            pass
+        else:
+            self.add_item(edit_server_list_button(self.cog, self.bot))
+            self.add_item(delete_server_list_button(self.cog, self.bot))
 
-    name = discord.ui.TextInput(
-        label="Enter the name of the Server List",
-        placeholder="Type your name here...",
-        required=True,
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-        self.view.name = self.name.value
-        embed: discord.Embed = self.view.create_current_settings_embed()
-        self.view.embed = embed
-        await interaction.response.edit_message(embed=self.view.embed)
+    @discord.ui.button(label="← Back")
+    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass
 
 
-class CreateServerList(View):
-    cog: SetupCog
+class CreateServerListView(View):
+    cog: ServerListCog
     bot: MidairBot
     channel: AppCommandChannel | None
     name: str
@@ -115,17 +147,19 @@ class CreateServerList(View):
 
     def __init__(
         self,
-        cog: SetupCog,
+        cog: ServerListCog,
         bot: MidairBot,
         channel: AppCommandChannel | None = None,
+        message: discord.Message | None = None,
         name: str = "Midair 2 Public Server List",
     ):
         super().__init__(timeout=None)
-        self.cog = cog
-        self.bot = bot
-        self.channel = channel
-        self.name = name
-        self.embed = self.create_current_settings_embed()
+        self.cog: ServerListCog = cog
+        self.bot: MidairBot = bot
+        self.channel: AppCommandChannel | None = channel
+        self.message: discord.Message | None = message
+        self.name: str = name
+        self.embed: discord.Embed = self.create_current_settings_embed()
 
     @discord.ui.button(label="Set Title", row=1)  # title = name
     async def set_name(
@@ -188,10 +222,18 @@ class CreateServerList(View):
                 )
                 return
             server_list_embed: discord.Embed = cog.create_embed(self.name)
-            message: discord.Message | None = await cog.send_server_list(
+            if self.message:
+                await cog.edit_server_list(
+                    interaction.guild_id,
+                    self.channel.id,
+                    self.message.id,
+                    server_list_embed,
+                )
+                return
+            new_message: discord.Message | None = await cog.send_server_list(
                 interaction.guild_id, self.channel.id, server_list_embed
             )
-            if not message:
+            if not new_message:
                 log.error(
                     f"[submit] Failed to send message in channel {self.channel.id} for guild {interaction.guild_id}"
                 )
@@ -203,12 +245,19 @@ class CreateServerList(View):
                     ephemeral=True,
                 )
                 return
-            embed = discord.Embed(
+            followup_embed = discord.Embed(
                 title="Server List Created!",
-                description=f"Check it out here {message.jump_url}",
+                description=f"Check it out here {new_message.jump_url}",
                 color=discord.Color.green(),
             )
-            await interaction.response.edit_message(embed=embed, view=None)
+            embed = await self.cog.create_embed(
+                self.channel.id, new_message.id, self.name, exists=True
+            )
+            await interaction.response.edit_message(
+                embed=embed,
+                view=ConfigureServerListView(self.cog, self.bot, exists=True),
+            )
+            await interaction.followup.send(embed=followup_embed, ephemeral=True)
         except discord.Forbidden:
             log.exception(
                 f"[submit] Missing permissions to post in guild {interaction.guild_id} inside channel {self.channel.id}"
@@ -246,60 +295,45 @@ class CreateServerList(View):
         return embed
 
 
-class SetupView(View):
-    cog: SetupCog
-    bot: MidairBot
-    exists: bool
-
-    def __init__(self, cog: SetupCog, bot: MidairBot, exists: bool):
+class ServerListNameModal(discord.ui.Modal, title="Server List Name"):
+    def __init__(self, view: CreateServerListView):
         super().__init__(timeout=None)
-        self.cog = cog
-        self.bot = bot
-        self.exists = exists
-        if not exists:
-            self.add_item(create_server_list_button(self.cog, self.bot))
-            pass
-        else:
-            self.add_item(edit_server_list_button(self.cog, self.bot))
-            self.add_item(delete_server_list_button(self.cog, self.bot))
+        self.view = view
 
-    @discord.ui.button(label="← Back")
-    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass
+    name = discord.ui.TextInput(
+        label="Enter the name of the Server List",
+        placeholder="Type your name here...",
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        self.view.name = self.name.value
+        embed: discord.Embed = self.view.create_current_settings_embed()
+        self.view.embed = embed
+        await interaction.response.edit_message(embed=self.view.embed)
 
 
-class create_server_list_button(discord.ui.Button[SetupView]):
-    cog: SetupCog
+class create_server_list_button(discord.ui.Button[ConfigureServerListView]):
+    cog: ServerListCog
     bot: MidairBot
 
-    def __init__(self, cog: SetupCog, bot: MidairBot, disabled: bool = False):
-        super().__init__(label="Create", disabled=disabled)
+    def __init__(self, cog: ServerListCog, bot: MidairBot, disabled: bool = False):
+        super().__init__(
+            label="Create", disabled=disabled, style=discord.ButtonStyle.primary
+        )
         self.cog = cog
         self.bot = bot
 
     async def callback(self, interaction: discord.Interaction):
-        view = CreateServerList(self.cog, self.bot)
+        view = CreateServerListView(self.cog, self.bot)
         await interaction.response.edit_message(embed=view.embed, view=view)
 
 
-class edit_server_list_button(discord.ui.Button[SetupView]):
+class delete_server_list_button(discord.ui.Button[ConfigureServerListView]):
     bot: MidairBot
+    cog: ServerListCog
 
-    def __init__(self, cog: SetupCog, bot: MidairBot, disabled: bool = False):
-        super().__init__(label="Edit", disabled=disabled)
-        self.cog = cog
-        self.bot = bot
-
-    async def callback(self, interaction: discord.Interaction):
-        assert self.view is not None
-        await interaction.delete_original_response()
-
-
-class delete_server_list_button(discord.ui.Button[SetupView]):
-    bot: MidairBot
-    cog: SetupCog
-
-    def __init__(self, cog: SetupCog, bot: MidairBot, disabled: bool = False):
+    def __init__(self, cog: ServerListCog, bot: MidairBot, disabled: bool = False):
         super().__init__(
             label="Delete", disabled=disabled, style=discord.ButtonStyle.danger
         )
@@ -307,16 +341,25 @@ class delete_server_list_button(discord.ui.Button[SetupView]):
         self.bot = bot
 
     async def callback(self, interaction: discord.Interaction):
-        assert self.view is not None
-        async with self.bot.pool.acquire() as conn:
-            await conn.execute(
-                "DELETE FROM server_list WHERE guild_id = $1", interaction.guild_id
-            )
-            await conn.commit()
-            await interaction.response.edit_message(
-                view=SetupView(self.cog, self.bot, False)
-            )
+        assert interaction.guild_id
+        await self.cog.delete_server_list(interaction.guild_id)
+        embed: discord.Embed = await self.cog.create_embed(exists=False)
+        await interaction.response.edit_message(
+            embed=embed, view=ConfigureServerListView(self.cog, self.bot, False)
+        )
+
+
+class edit_server_list_button(discord.ui.Button[ConfigureServerListView]):
+    bot: MidairBot
+
+    def __init__(self, cog: ServerListCog, bot: MidairBot, disabled: bool = False):
+        super().__init__(label="Edit", disabled=disabled)
+        self.cog = cog
+        self.bot = bot
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.delete_original_response()
 
 
 async def setup(bot: MidairBot):
-    await bot.add_cog(SetupCog(bot))
+    await bot.add_cog(ServerListCog(bot))

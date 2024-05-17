@@ -121,7 +121,7 @@ class WatcherCog(commands.Cog):
                     await self.send_server_list(guild_id, channel_id, embed)
                 else:
                     log.exception(
-                        f"[edit_server_list] Ignoring HTTP exception when editing {message_id} in {channel_id} for guild {guild_id}"
+                        f"[edit_server_list] Ignoring HTTP exception when editing message {message_id} in channel {channel_id} for guild {guild_id}"
                     )
             """
             try:
@@ -169,7 +169,7 @@ class WatcherCog(commands.Cog):
                     return None
 
     def create_embed(self, title: str) -> discord.Embed:
-        embed = discord.Embed(title=title, color=discord.Color.yellow())
+        embed = discord.Embed(title=title, color=discord.Color.dark_embed())
         footer_text = "Only unlocked servers are shown."
         footer_text += "\nLast updated"
         embed.set_footer(text=footer_text)

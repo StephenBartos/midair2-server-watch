@@ -10,7 +10,8 @@ import config
 initial_extensions = (
     "cogs.admin",
     "cogs.watcher",
-    "cogs.setup",
+    "cogs.serverlist",
+    "cogs.configure",
 )
 log = logging.getLogger(__name__)
 
