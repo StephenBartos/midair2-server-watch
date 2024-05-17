@@ -13,7 +13,7 @@ to this [API](https://api.midair2.gg/v1/server/public) will affect the bot.
 # Getting Started
 Use [this link](https://discord.com/oauth2/authorize?client_id=1237575746315354192) to invite the bot to your server.
 
-There is only one command, `/configure` which opens an interactive configuration menu to setup either the Server List or the Server Notifier.
+There is only one command, `/configure`, which opens an interactive configuration menu to setup and manage either the Server List or the Server Notifier.
 
 **Note**: Make sure to limit which roles can use the bot's slash commands through the Discord Server Setttings.
 
@@ -40,7 +40,8 @@ in the [Discord Developer Portal](https://discord.com/developers/applications)
 ```conf
 TOKEN=your-bot-token
 MIDAIR_SERVERS_API_URL=https://api.midair2.gg/v1/server/public
-DB_NAME=your-db-name```
+DB_NAME=your-db-name
+```
 
 ### Run the bot
 - `python3 -m launcher.py`
