@@ -6,8 +6,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from cogs.base import View
-from cogs.serverlist import ServerListCog
+from cogs.base import PageView
+from cogs.serverlist import ConfigureServerListView, ServerListCog
 
 if TYPE_CHECKING:
     from bot import MidairBot
@@ -22,21 +22,22 @@ class ConfigureCog(commands.Cog, name="configure"):
     )
     @app_commands.guild_only()
     async def configure(self, interaction: discord.Interaction):
-        view = ConfigureView(self, self.bot)
         embed_description: str = "Configure the Server List or Server Notifier"
         embed = discord.Embed(
             title="Configure",
             description=embed_description,
             color=discord.Color.yellow(),
         )
+        view = ConfigureView(self, self.bot, embed)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-class ConfigureView(View):
-    def __init__(self, cog: ConfigureCog, bot: MidairBot):
+class ConfigureView(PageView):
+    def __init__(self, cog: ConfigureCog, bot: MidairBot, embed: discord.Embed):
         super().__init__(timeout=None)
         self.cog: ConfigureCog = cog
         self.bot: MidairBot = bot
+        self.embed: discord.Embed = embed
 
     @discord.ui.button(label="Server List")
     async def server_list(
@@ -53,7 +54,12 @@ class ConfigureView(View):
                 ephemeral=True,
             )
             return
-        embed, view = await cog.configure_server_list(interaction.guild_id)
+        view: ConfigureServerListView = await cog.configure_server_list(
+            interaction.guild_id
+        )
+        embed: discord.Embed = view.embed
+        view.prev_view = self
+        view.prev_embed = self.embed
         await interaction.response.edit_message(embed=embed, view=view)
 
     @discord.ui.button(label="Notifications")

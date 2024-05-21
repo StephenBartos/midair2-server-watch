@@ -8,9 +8,10 @@ from discord.ext import commands
 import config
 
 initial_extensions = (
-    "cogs.admin",
+    "cogs.owner",
     "cogs.watcher",
     "cogs.serverlist",
+    "cogs.notifier",
     "cogs.configure",
 )
 log = logging.getLogger(__name__)

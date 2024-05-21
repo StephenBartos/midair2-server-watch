@@ -10,10 +10,10 @@ from discord import Color, app_commands
 from discord.app_commands import AppCommandChannel
 from discord.ext import commands
 
-from cogs.admin import Admin
+from cogs.owner import OwnerCog
 from cogs.watcher import WatcherCog
 
-from .base import View
+from .base import PageView, View
 
 if TYPE_CHECKING:
     from bot import MidairBot
@@ -25,21 +25,19 @@ class ServerListCog(commands.Cog):
     def __init__(self, bot):
         self.bot: MidairBot = bot
 
-    async def configure_server_list(
-        self, guild_id: int
-    ) -> tuple[discord.Embed, discord.ui.View]:
+    async def configure_server_list(self, guild_id: int) -> ConfigureServerListView:
         async with self.bot.pool.acquire() as conn:
             query = "SELECT guild_id, channel_id, message_id, title FROM server_list WHERE guild_id=$1;"
             server_list = await conn.fetchone(query, guild_id)
             exists: bool = bool(server_list)
-            view = ConfigureServerListView(self, self.bot, exists)
+            title: str | None = server_list["title"] if server_list else None
             channel_id: int | None = server_list["channel_id"] if server_list else None
             message_id: int | None = server_list["message_id"] if server_list else None
-            title: str | None = server_list["title"] if server_list else None
             embed = await self.create_embed(
                 channel_id, message_id, title, exists=bool(server_list)
             )
-            return embed, view
+            view = ConfigureServerListView(self, self.bot, exists=exists, embed=embed)
+            return view
 
     async def delete_server_list(
         self,
@@ -116,27 +114,20 @@ class ServerListCog(commands.Cog):
         return embed
 
 
-class ConfigureServerListView(View):
-    cog: ServerListCog
-    bot: MidairBot
-    exists: bool
-
-    def __init__(self, cog: ServerListCog, bot: MidairBot, exists: bool):
-        super().__init__(timeout=None)
-        self.cog = cog
-        self.bot = bot
-        self.exists = exists
+class ConfigureServerListView(PageView):
+    def __init__(
+        self, cog: ServerListCog, bot: MidairBot, *, exists: bool, embed: discord.Embed
+    ):
+        super().__init__(timeout=None, embed=embed)
+        self.cog: ServerListCog = cog
+        self.bot: MidairBot = bot
+        self.exists: bool = exists
         if not exists:
             self.add_item(create_server_list_button(self.cog, self.bot))
             pass
         else:
             self.add_item(edit_server_list_button(self.cog, self.bot))
             self.add_item(delete_server_list_button(self.cog, self.bot))
-
-    @discord.ui.button(label="← Back")
-    async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass
-
 
 class CreateServerListView(View):
     cog: ServerListCog
@@ -160,6 +151,8 @@ class CreateServerListView(View):
         self.message: discord.Message | None = message
         self.name: str = name
         self.embed: discord.Embed = self.create_current_settings_embed()
+        self.prev_view: View | None
+        self.prev_embed: discord.Embed | None
 
     @discord.ui.button(label="Set Title", row=1)  # title = name
     async def set_name(
@@ -193,7 +186,9 @@ class CreateServerListView(View):
 
     @discord.ui.button(label="← Back", row=3)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass
+        await interaction.response.edit_message(
+            view=self.prev_view, embed=self.prev_embed
+        )
 
     @discord.ui.button(
         label="Submit", row=3, style=discord.ButtonStyle.primary, disabled=True
@@ -255,7 +250,9 @@ class CreateServerListView(View):
             )
             await interaction.response.edit_message(
                 embed=embed,
-                view=ConfigureServerListView(self.cog, self.bot, exists=True),
+                view=ConfigureServerListView(
+                    self.cog, self.bot, exists=True, embed=embed
+                ),
             )
             await interaction.followup.send(embed=followup_embed, ephemeral=True)
         except discord.Forbidden:
@@ -326,6 +323,9 @@ class create_server_list_button(discord.ui.Button[ConfigureServerListView]):
 
     async def callback(self, interaction: discord.Interaction):
         view = CreateServerListView(self.cog, self.bot)
+        if self.view:
+            view.prev_view = self.view
+            view.embed = self.view.embed
         await interaction.response.edit_message(embed=view.embed, view=view)
 
 

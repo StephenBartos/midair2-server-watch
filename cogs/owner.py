@@ -14,14 +14,14 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class Admin(commands.Cog):
+class OwnerCog(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: MidairBot = bot
 
-    @commands.command()
+    @commands.command(name="sync", hidden=True)
     @commands.guild_only()
     @commands.is_owner()
-    async def sync(
+    async def _sync(
         self,
         ctx: Context,
         guilds: commands.Greedy[discord.Object],
@@ -60,6 +60,28 @@ class Admin(commands.Cog):
 
         await ctx.send(f"Synced the tree to {ret}/{len(guilds)}.")
 
+    @commands.command(name="reload", hidden=True)
+    @commands.guild_only()
+    @commands.is_owner()
+    async def _reload(
+        self,
+        ctx: Context,
+        *,
+        module: str,
+    ) -> None:
+        """
+        Reloads a module.
+        """
+        try:
+            await self.bot.reload_extension(module)
+        except commands.ExtensionError as e:
+            log.exception(
+                f"[_reload] Failed to reload module {e.__class__.__name__}: {e}"
+            )
+            await ctx.send(f"{e.__class__.__name__}: {e}")
+        else:
+            await ctx.reply(f"Reloaded `{module}`")
+
 
 async def setup(bot: MidairBot):
-    await bot.add_cog(Admin(bot))
+    await bot.add_cog(OwnerCog(bot))
