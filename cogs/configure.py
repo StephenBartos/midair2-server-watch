@@ -62,7 +62,7 @@ class ConfigureView(PageView):
         view.prev_embed = self.embed
         await interaction.response.edit_message(embed=embed, view=view)
 
-    @discord.ui.button(label="Notifications")
+    @discord.ui.button(label="Notifications", disabled=True)
     async def notifier(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):

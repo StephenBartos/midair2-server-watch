@@ -35,6 +35,33 @@ class MidairBot(commands.Bot):
             intents=intents,
         )
 
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        async with self.pool.acquire() as conn:
+            try:
+                await conn.execute(
+                    "INSERT INTO guild (id) VALUES ($1) ON CONFLICT DO NOTHING",
+                    guild.id,
+                )
+                log.info(f'[on_guild_join] Joined guild "{guild.name}" ({guild.id})')
+            except:
+                log.exception(
+                    f"[on_guild_join] Failed to insert guild_id {guild.id} into the guild table"
+                )
+                await conn.rollback()
+
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
+        async with self.pool.acquire() as conn:
+            try:
+                await conn.execute("DELETE FROM guild WHERE id = $1", guild.id)
+                log.info(
+                    f'[on_guild_remove] Removed from guild "{guild.name}" ({guild.id})'
+                )
+            except:
+                log.exception(
+                    f"[on_guild_join] Failed to remove guild_id {guild.id} from the guild table"
+                )
+                await conn.rollback()
+
     async def setup_hook(self) -> None:
         self.pool = await asqlite.create_pool(f"{config.DB_NAME}.db")
         self.session = aiohttp.ClientSession()

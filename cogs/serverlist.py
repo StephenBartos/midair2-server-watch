@@ -109,7 +109,10 @@ class ServerListCog(commands.Cog):
             embed.add_field(name="📺 Channel", value=channel_str)
             embed.add_field(name="✉️ Message", value=message_str)
         else:
-            embed_description = "Create a new Server List"
+            embed_description = "Create a new Server List."
+            embed.set_footer(
+                text="Note: If you can't see the channel in the list, start typings its name."
+            )
         embed.description = embed_description
         return embed
 
@@ -126,7 +129,7 @@ class ConfigureServerListView(PageView):
             self.add_item(create_server_list_button(self.cog, self.bot))
             pass
         else:
-            self.add_item(edit_server_list_button(self.cog, self.bot))
+            # self.add_item(edit_server_list_button(self.cog, self.bot)) TODO
             self.add_item(delete_server_list_button(self.cog, self.bot))
 
 class CreateServerListView(View):
@@ -345,7 +348,8 @@ class delete_server_list_button(discord.ui.Button[ConfigureServerListView]):
         await self.cog.delete_server_list(interaction.guild_id)
         embed: discord.Embed = await self.cog.create_embed(exists=False)
         await interaction.response.edit_message(
-            embed=embed, view=ConfigureServerListView(self.cog, self.bot, False)
+            embed=embed,
+            view=ConfigureServerListView(self.cog, self.bot, exists=False, embed=embed),
         )
 
 

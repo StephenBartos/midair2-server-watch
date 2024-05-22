@@ -151,7 +151,7 @@ class WatcherCog(commands.Cog):
             async with self.bot.pool.acquire() as conn:
                 try:
                     await conn.execute(
-                        "INSERT INTO GUILD (guild_id) VALUES ($1) ON CONFLICT DO NOTHING",
+                        "INSERT INTO guild (id) VALUES ($1) ON CONFLICT DO NOTHING",
                         guild_id,
                     )
                     query = """INSERT INTO server_list (guild_id, channel_id, message_id, title) VALUES ($1, $2, $3, $4)
