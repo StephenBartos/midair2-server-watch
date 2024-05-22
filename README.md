@@ -3,7 +3,7 @@ This is Discord bot with minimal permissions and dependencies that
 can both create an embedded server list and send message updates
 when a pub server is filling up.
 
-It is based of of the [Official Midair 2 Server List](https://midair2.gg/servers), so any changes
+It is based off of the [Official Midair 2 Server List](https://midair2.gg/servers), so any changes
 to this [API](https://api.midair2.gg/v1/server/public) will affect the bot.
 
 # Features
