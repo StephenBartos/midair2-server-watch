@@ -65,9 +65,16 @@ class WatcherCog(commands.Cog):
                     return
                 json_body = await resp.json()
                 servers_json = json_body["servers"] if "servers" in json_body else []
-                self.midair_servers: list[MidairServer] = (
-                    [MidairServer(**j) for j in servers_json] if servers_json else []
-                )
+                try:
+                    self.midair_servers: list[MidairServer] = (
+                        [MidairServer(**j) for j in servers_json]
+                        if servers_json
+                        else []
+                    )
+                except:
+                    log.exception(
+                        f"[midair_server_list_task] Failed to create MidairServer instances with json body: {servers_json}"
+                    )
                 self.midair_servers.sort(key=lambda x: x.players, reverse=True)
                 await self.update_guild_server_lists()
 
